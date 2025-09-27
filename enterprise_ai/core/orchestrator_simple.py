@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 from .agents import AgentFactory, AgentConfigurationProvider
-from ..integrations.tools import ToolFactory
+from ..integrations import ToolFactory
 from .routing import RoutingService, QuestionAnalyzer
 
 
@@ -25,7 +25,16 @@ class SystemOrchestrator:
         # Initialize core components (no server-side tracking)
         self.model_client = self._create_model_client()
         self.tools = self._create_tools()
-        self.agent_factory = AgentFactory(self.model_client, self.tools)
+        # Configure compression settings
+        enable_compression = os.getenv("ENTERPRISE_AI_ENABLE_COMPRESSION", "true").lower() == "true"
+        max_tokens = int(os.getenv("ENTERPRISE_AI_MAX_TOKENS", "100000"))
+
+        self.agent_factory = AgentFactory(
+            self.model_client,
+            self.tools,
+            enable_compression=enable_compression,
+            max_tokens=max_tokens
+        )
         self.routing_service = RoutingService()
         
         # Create agents
@@ -41,8 +50,9 @@ class SystemOrchestrator:
             # Return a mock client for testing
             return None
         
+        model = os.getenv("ENTERPRISE_AI_MODEL", "gpt-4o-mini")
         return OpenAIChatCompletionClient(
-            model="gpt-4o-mini",
+            model=model,
             api_key=api_key
         )
     
@@ -60,7 +70,8 @@ class SystemOrchestrator:
         return {
             "math": self.agent_factory.create_agent(configs.get_math_agent_config()),
             "system": self.agent_factory.create_agent(configs.get_system_agent_config()),
-            "general": self.agent_factory.create_agent(configs.get_general_agent_config())
+            "general": self.agent_factory.create_agent(configs.get_general_agent_config()),
+            "wordle": self.agent_factory.create_agent(configs.get_wordle_agent_config())
         }
     
     async def process_question(self, question: str) -> Dict[str, Any]:

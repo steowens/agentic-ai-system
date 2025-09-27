@@ -13,7 +13,8 @@ def main():
     
     print("ENTERPRISE AI WEB INTERFACE")
     print("="*50)
-    print("Dashboard available at: http://localhost:8000")
+    port = os.getenv("ENTERPRISE_AI_PORT", "8000")
+    print(f"Dashboard available at: http://localhost:{port}")
     print("Press Ctrl+C to stop")
     print("="*50)
     
@@ -34,10 +35,11 @@ async def start_web_server():
         from enterprise_ai.dashboard import app
         import uvicorn
         
+        port = int(os.getenv("ENTERPRISE_AI_PORT", 8000))
         config = uvicorn.Config(
             app=app,
-            host="0.0.0.0", 
-            port=8000,
+            host="0.0.0.0",
+            port=port,
             log_level="info"
         )
         server = uvicorn.Server(config)

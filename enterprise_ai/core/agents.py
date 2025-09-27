@@ -2,11 +2,12 @@
 Agent factory and configurations following SOLID principles.
 Separates agent creation from business logic.
 """
-from typing import Dict, List
+from typing import Dict, List, Any
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.tools import AgentTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
-from ..integrations.tools import BaseTool
+from ..integrations import BaseTool
+from .compressed_agent import CompressedAssistantAgent, ContextCompressionService
 
 
 class AgentConfig:
@@ -20,10 +21,13 @@ class AgentConfig:
 
 class AgentFactory:
     """Factory for creating agents - Open/Closed Principle"""
-    
-    def __init__(self, model_client: OpenAIChatCompletionClient, available_tools: Dict[str, BaseTool]):
+
+    def __init__(self, model_client: OpenAIChatCompletionClient, available_tools: Dict[str, BaseTool],
+                 enable_compression: bool = True, max_tokens: int = 100000):
         self.model_client = model_client
         self.available_tools = available_tools
+        self.enable_compression = enable_compression
+        self.max_tokens = max_tokens
     
     def create_agent(self, config: AgentConfig) -> AssistantAgent:
         """Create an agent based on configuration"""
@@ -32,18 +36,38 @@ class AgentFactory:
         for tool_name in config.required_tools:
             if tool_name in self.available_tools:
                 agent_tools.append(self.available_tools[tool_name].get_function_tool())
-        
-        return AssistantAgent(
-            name=config.name,
-            model_client=self.model_client,
-            system_message=config.system_message,
-            tools=agent_tools
-        )
+
+        # Create compressed or regular agent based on configuration
+        if self.enable_compression:
+            print(f"🗜️ Creating CompressedAssistantAgent: {config.name} (max_tokens: {self.max_tokens})")
+            return CompressedAssistantAgent(
+                name=config.name,
+                model_client=self.model_client,
+                system_message=config.system_message,
+                tools=agent_tools,
+                max_tokens=self.max_tokens,
+                compression_ratio=0.7  # Compress at 70% of max tokens
+            )
+        else:
+            print(f"📝 Creating standard AssistantAgent: {config.name}")
+            return AssistantAgent(
+                name=config.name,
+                model_client=self.model_client,
+                system_message=config.system_message,
+                tools=agent_tools
+            )
     
     def create_agent_tool(self, config: AgentConfig) -> AgentTool:
         """Create an AgentTool wrapper for delegation"""
         agent = self.create_agent(config)
         return AgentTool(agent)
+
+    def get_compression_stats(self, agent: AssistantAgent) -> Dict[str, Any]:
+        """Get compression statistics for an agent"""
+        if isinstance(agent, CompressedAssistantAgent):
+            return ContextCompressionService.get_compression_stats(agent)
+        else:
+            return {"status": "compression_disabled", "agent_type": "standard"}
 
 
 class AgentConfigurationProvider:
@@ -55,22 +79,19 @@ class AgentConfigurationProvider:
             name="math_agent",
             system_message=r"""You are a careful mathematics expert with access to a precise calculator.
 
-CRITICAL DECISION PROCESS:
-1. ANALYZE the user's request carefully
-2. IDENTIFY if there are mathematical expressions to calculate
-3. If UNSURE whether calculation is needed: ASK CLARIFYING QUESTIONS first
-4. NEVER assume - be explicit about what you're calculating
+MANDATORY CALCULATOR USAGE:
+For ANY question involving numbers, calculations, measurements, or mathematical expressions, you MUST use the calculator tool FIRST before providing any response.
 
-WHEN TO USE THE CALCULATOR TOOL:
-- Clear numerical expressions: "What is 123 * 456?"
-- Mathematical functions: "Calculate sin(30 degrees)"  
-- Complex expressions: "What's the result of (5^3 + sqrt(144)) / 2?"
-- Unit conversions with math: "Convert 75 mph to m/s"
-- Geometry calculations: "diameter of circle with circumference 22" → Use: 22/pi
+EXAMPLES REQUIRING CALCULATOR:
+- "What is 2+2?" → Use calculator: "2+2"
+- "Height of roof truss with 30 foot span and 4:12 pitch?" → Use calculator: "30 * (4/12) / 2"
+- "What is sin(30)?" → Use calculator: "sin(30)"
+- "Convert 75 mph to m/s" → Use calculator: "75 * 0.44704"
+- ANY question with numbers → ALWAYS use calculator tool first
 
-WHEN TO USE YOUR KNOWLEDGE:
-- Conceptual explanations: "What is a derivative?"
-- Theoretical questions: "Prove the Pythagorean theorem"
+ONLY USE YOUR KNOWLEDGE WITHOUT CALCULATOR FOR:
+- Pure conceptual explanations: "What is a derivative?"
+- Theoretical proofs: "Prove the Pythagorean theorem"
 - Method explanations: "How do you integrate by parts?"
 
 WHEN TO ASK QUESTIONS:
@@ -137,4 +158,33 @@ Examples:
             name="general_agent",
             system_message="You are a helpful assistant. Answer general questions with your knowledge.",
             tools=[]
+        )
+
+    @staticmethod
+    def get_wordle_agent_config() -> AgentConfig:
+        return AgentConfig(
+            name="wordle_agent",
+            system_message="""You are a Wordle puzzle expert with access to a constraint solver.
+
+MANDATORY TOOL USAGE:
+For ANY Wordle-related question, you MUST use the solve_wordle tool.
+
+EXAMPLES REQUIRING TOOL:
+- "Find a word without letters CORTI or U, containing P and S, with P at position 2"
+  → Use tool: solve_wordle(excluded_letters="CORTIU", included_letters="PS", letters_at="P:2")
+
+- "I need a word with two E's and no A, B, C"
+  → Use tool: solve_wordle(excluded_letters="ABC", included_letters="EE", letters_at="")
+
+- "Word with R at position 3, S at position 5, no vowels except E"
+  → Use tool: solve_wordle(excluded_letters="AIOU", included_letters="E", letters_at="R:3,S:5")
+
+PARAMETER FORMAT:
+- excluded_letters: String of letters to exclude (e.g., "ABCD")
+- included_letters: String of required letters, duplicates for count (e.g., "EE" means two E's)
+- letters_at: Position constraints as "letter:position" pairs (e.g., "P:2,S:4")
+
+RESPONSE FORMAT:
+Always use the tool first, then explain the results in a user-friendly way.""",
+            tools=["wordle"]
         )

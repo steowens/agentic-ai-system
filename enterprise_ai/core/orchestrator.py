@@ -13,13 +13,13 @@ from autogen_ext.models.openai import OpenAIChatCompletionClient
 from autogen_agentchat.tools import AgentTool
 
 # Import from our organized packages
-from ..monitoring.metrics import MetricsCollector
+from ..monitoring.metrics import MetricsCollector, TokenUsage, AgentExecution, RoutingDecision, StructuredLogger
 from ..learning.feedback import feedback_collector
 from ..learning.routing_engine import routing_engine
 from ..integrations.mcp_framework import mcp_orchestrator, process_mcp_request
 
 from .agents import AgentFactory, AgentConfigurationProvider
-from ..integrations.tools import ToolFactory, BaseTool
+from ..integrations import ToolFactory, BaseTool
 from .routing import RoutingService, QuestionAnalyzer
 
 
@@ -44,9 +44,17 @@ class SystemOrchestrator:
         # Initialize core dependencies
         self.model_client = self._create_model_client(api_key)
         self.tools = self._create_tools()
-        self.agent_factory = AgentFactory(self.model_client, self.tools)
+        # Configure compression settings
+        enable_compression = os.getenv("ENTERPRISE_AI_ENABLE_COMPRESSION", "true").lower() == "true"
+        max_tokens = int(os.getenv("ENTERPRISE_AI_MAX_TOKENS", "100000"))
+
+        self.agent_factory = AgentFactory(
+            self.model_client,
+            self.tools,
+            enable_compression=enable_compression,
+            max_tokens=max_tokens
+        )
         self.routing_service = RoutingService()
-        self.question_analyzer = QuestionAnalyzer()
         
         # Create agent tools for delegation
         self.agents = self._create_agents()
@@ -58,8 +66,9 @@ class SystemOrchestrator:
             if not final_api_key:
                 raise ValueError("OPENAI_API_KEY must be provided either as parameter or environment variable")
             
+            model = os.getenv("ENTERPRISE_AI_MODEL", "gpt-4o-mini")
             return OpenAIChatCompletionClient(
-                model="gpt-4o-mini",
+                model=model,
                 api_key=final_api_key
             )
         except Exception as e:
@@ -68,29 +77,21 @@ class SystemOrchestrator:
     
     def _create_tools(self) -> Dict[str, BaseTool]:
         """Create and configure system tools"""
-        tool_factory = ToolFactory()
-        return {
-            "math_calculator": tool_factory.create_tool("math_calculator"),
-            "file_system": tool_factory.create_tool("file_system")
-        }
+        return ToolFactory.get_all_tools()
     
-    def _create_agents(self) -> Dict[str, AgentTool]:
-        """Create agent tools for the routing system"""
-        config_provider = AgentConfigurationProvider()
-        
-        agents = {}
-        for agent_type in ["math", "system", "general"]:
-            config = config_provider.get_configuration(agent_type)
-            agent = self.agent_factory.create_agent(config)
-            
-            # Wrap agent as a tool for routing
-            agents[f"{agent_type}_agent"] = AgentTool(
-                name=f"{agent_type}_agent",
-                description=config.description,
-                func=lambda question, agent=agent: self._execute_agent(agent, question)
-            )
-        
-        return agents
+    def _create_agents(self) -> Dict[str, Any]:
+        """Create all configured agents"""
+        if not self.model_client:
+            return {}
+
+        configs = AgentConfigurationProvider()
+
+        return {
+            "math": self.agent_factory.create_agent(configs.get_math_agent_config()),
+            "system": self.agent_factory.create_agent(configs.get_system_agent_config()),
+            "general": self.agent_factory.create_agent(configs.get_general_agent_config()),
+            "wordle": self.agent_factory.create_agent(configs.get_wordle_agent_config())
+        }
     
     def _execute_agent(self, agent, question: str) -> str:
         """Execute agent with comprehensive tracking"""
@@ -168,50 +169,60 @@ class SystemOrchestrator:
         start_time = time.time()
         
         try:
-            # Analyze question
-            analysis = self.question_analyzer.analyze_question(question)
-            
-            # Get routing decision with confidence
-            routing_decision = self.routing_service.route_question(question, self.agents)
-            
-            # Log routing decision
-            self.metrics.log_routing_decision(RoutingDecision(
-                question=question,
-                selected_agent=routing_decision['agent_name'],
-                confidence=routing_decision['confidence'],
-                reasoning=routing_decision['reasoning'],
-                available_agents=list(self.agents.keys()),
-                question_analysis=analysis,
-                timestamp=datetime.now()
-            ))
-            
-            # Execute selected agent
-            selected_agent_tool = self.agents[routing_decision['agent_name']]
-            response = selected_agent_tool.func(question)
+            # Get routing decision (same as orchestrator_simple)
+            agent_type, reasoning, confidence = self.routing_service.get_routing_info(question)
+
+            # Get the appropriate agent (same as orchestrator_simple)
+            agent = self.agents.get(agent_type, self.agents["general"])
+
+            # Process with the agent (same as orchestrator_simple)
+            result = await agent.run(task=question)
+
+            # Extract clean text from AutoGen response (same as orchestrator_simple)
+            if hasattr(result, 'messages') and result.messages:
+                last_message = result.messages[-1]
+                if hasattr(last_message, 'content'):
+                    response = last_message.content
+                else:
+                    response = str(last_message)
+            else:
+                response = str(result)
             
             processing_time = time.time() - start_time
             
             # Calculate enhanced cost breakdown
             token_usage = self._estimate_token_usage(question, response)
-            cost_breakdown = self.metrics.calculate_cost(token_usage, model="gpt-4o-mini")
+            cost_breakdown = self.metrics.calculate_cost(token_usage, model=os.getenv("ENTERPRISE_AI_MODEL", "gpt-4o-mini"))
             
-            # Return comprehensive response
+            # Estimate cost (simplified - same as orchestrator_simple)
+            input_tokens = len(question.split()) * 1.3  # Rough estimate
+            output_tokens = len(response.split()) * 1.3
+            cost = (input_tokens * 0.00015 + output_tokens * 0.0006) / 1000
+
+            # Return response (exact format from orchestrator_simple)
             return {
                 "response": response,
-                "agent_used": routing_decision['agent_name'],
-                "routing_confidence": routing_decision['confidence'],
-                "routing_reasoning": routing_decision['reasoning'],
-                "question_analysis": analysis,
-                "tokens_used": {
-                    "input": token_usage.input_tokens,
-                    "output": token_usage.output_tokens, 
-                    "total": token_usage.total_tokens
-                },
-                "cost": cost_breakdown.get("total_cost", 0.0),
-                "cost_breakdown": cost_breakdown,
+                "agent_type": agent_type,
+                "agent_used": agent_type,  # Keep for backward compatibility
+                "routing_reasoning": reasoning,
+                "reasoning": reasoning,  # Frontend expects this
+                "routing_confidence": confidence,
+                "confidence": confidence,  # Frontend expects this
                 "processing_time": processing_time,
-                "timestamp": datetime.now().isoformat(),
-                "success": True
+                "execution_time_ms": processing_time * 1000,  # Frontend expects this in ms
+                "cost": cost,
+                "token_usage": {
+                    "total_tokens": int((len(question.split()) + len(response.split())) * 1.3),
+                    "prompt_tokens": int(len(question.split()) * 1.3),
+                    "completion_tokens": int(len(response.split()) * 1.3),
+                    "estimated_cost_usd": cost,
+                    "input_cost_usd": cost * 0.25,  # Rough estimate
+                    "output_cost_usd": cost * 0.75,  # Rough estimate
+                    "input_rate_per_1k": 0.00015,
+                    "output_rate_per_1k": 0.0006,
+                    "cost_ratio": "4:1"
+                } if cost > 0 else None,
+                "request_id": f"req_{int(time.time())}"
             }
             
         except Exception as e:
@@ -242,7 +253,7 @@ class SystemOrchestrator:
             "status": "operational",
             "agents_available": len(self.agents),
             "tools_available": len(self.tools),
-            "model_client": "gpt-4o-mini",
+            "model_client": os.getenv("ENTERPRISE_AI_MODEL", "gpt-4o-mini"),
             "uptime": "system_running",
             "metrics": self.get_metrics_summary()
         }
@@ -413,7 +424,7 @@ class EnterpriseAISystem:
             tokens = secure_response["tokens_used"]
             self.cost_tracker.track_token_usage(
                 session_id=session_id,
-                model="gpt-4o-mini",
+                model=os.getenv("ENTERPRISE_AI_MODEL", "gpt-4o-mini"),
                 input_tokens=tokens.get("input", 0),
                 output_tokens=tokens.get("output", 0)
             )

@@ -79,6 +79,47 @@
             text-align: center;
             margin: 1em 0;
         }
+
+        /* Rating and feedback styling */
+        .feedback-section {
+            background-color: #f8f9fa;
+            border-radius: 0.375rem;
+        }
+
+        .star-rating {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .star-icon {
+            color: #ddd;
+            cursor: pointer;
+            transition: color 0.2s;
+            font-size: 1.2em;
+        }
+
+        .star-icon:hover,
+        .star-icon.active {
+            color: #ffc107;
+        }
+
+        .rating-label {
+            font-size: 0.9em;
+            margin-right: 0.5rem;
+        }
+
+        .feedback-form {
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .btn-group .btn-sm {
+            padding: 0.25rem 0.75rem;
+        }
     </style>
 </head>
 <body>
@@ -759,6 +800,45 @@
                     <h6><i class="fas fa-reply"></i> Response:</h6>
                     <div>${responseContent}</div>
                 </div>
+
+                <div class="feedback-section mt-3 p-3 border-top">
+                    <h6><i class="fas fa-star"></i> Rate this response:</h6>
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-success btn-sm" onclick="submitQuickFeedback('${data.request_id}', true)">
+                                <i class="fas fa-thumbs-up"></i> Good
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="submitQuickFeedback('${data.request_id}', false)">
+                                <i class="fas fa-thumbs-down"></i> Poor
+                            </button>
+                        </div>
+                        <div class="star-rating">
+                            <span class="rating-label">Detailed rating:</span>
+                            ${[1,2,3,4,5].map(star =>
+                                `<i class="fas fa-star star-icon" data-rating="${star}" data-request-id="${data.request_id}" onclick="setStarRating(${star}, '${data.request_id}')"></i>`
+                            ).join('')}
+                        </div>
+                    </div>
+                    <div class="feedback-form" id="feedback-form-${data.request_id}" style="display: none;">
+                        <div class="mb-2">
+                            <label class="form-label">Suggested agent:</label>
+                            <select class="form-select form-select-sm" id="suggested-agent-${data.request_id}">
+                                <option value="">No suggestion</option>
+                                <option value="math">Math Agent</option>
+                                <option value="wordle">Wordle Agent</option>
+                                <option value="general">General Agent</option>
+                                <option value="system">System Agent</option>
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Comment:</label>
+                            <textarea class="form-control form-control-sm" id="feedback-comment-${data.request_id}" rows="2" placeholder="Optional feedback..."></textarea>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="submitDetailedFeedback('${data.request_id}')">
+                            Submit Feedback
+                        </button>
+                    </div>
+                </div>
             `;
             
             // Highlight code blocks
@@ -876,6 +956,101 @@
         }
 
         // No WebSocket pings needed - using HTTP polling
+
+        // Feedback and rating functions
+        async function submitQuickFeedback(requestId, isPositive) {
+            const rating = isPositive ? 5 : 1;
+
+            try {
+                const response = await fetch('/api/feedback/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        request_id: requestId,
+                        rating: rating,
+                        feedback_type: 'quick',
+                        is_positive: isPositive
+                    })
+                });
+
+                if (response.ok) {
+                    // Visual feedback
+                    const button = event.target.closest('button');
+                    button.classList.remove('btn-outline-success', 'btn-outline-danger');
+                    button.classList.add(isPositive ? 'btn-success' : 'btn-danger');
+                    button.innerHTML = isPositive ? '<i class="fas fa-check"></i> Thanks!' : '<i class="fas fa-check"></i> Noted';
+
+                    // Disable both buttons
+                    const btnGroup = button.parentElement;
+                    btnGroup.querySelectorAll('button').forEach(btn => btn.disabled = true);
+
+                    console.log('Quick feedback submitted successfully');
+                } else {
+                    console.error('Failed to submit feedback');
+                    alert('Failed to submit feedback. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error submitting feedback:', error);
+                alert('Error submitting feedback. Please try again.');
+            }
+        }
+
+        function setStarRating(rating, requestId) {
+            // Update star display
+            const stars = document.querySelectorAll(`[data-request-id="${requestId}"]`);
+            stars.forEach((star, index) => {
+                if (index < rating) {
+                    star.classList.add('active');
+                } else {
+                    star.classList.remove('active');
+                }
+            });
+
+            // Show detailed feedback form
+            const feedbackForm = document.getElementById(`feedback-form-${requestId}`);
+            if (feedbackForm) {
+                feedbackForm.style.display = 'block';
+                // Store the rating
+                feedbackForm.dataset.rating = rating;
+            }
+        }
+
+        async function submitDetailedFeedback(requestId) {
+            const feedbackForm = document.getElementById(`feedback-form-${requestId}`);
+            const rating = parseInt(feedbackForm.dataset.rating) || 3;
+            const suggestedAgent = document.getElementById(`suggested-agent-${requestId}`).value;
+            const comment = document.getElementById(`feedback-comment-${requestId}`).value;
+
+            try {
+                const response = await fetch('/api/feedback/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        request_id: requestId,
+                        rating: rating,
+                        feedback_type: 'detailed',
+                        suggested_agent: suggestedAgent || null,
+                        comment: comment || null
+                    })
+                });
+
+                if (response.ok) {
+                    // Hide form and show success message
+                    feedbackForm.innerHTML = '<div class="alert alert-success">Thank you for your feedback! This helps improve the system.</div>';
+                    console.log('Detailed feedback submitted successfully');
+                } else {
+                    console.error('Failed to submit detailed feedback');
+                    alert('Failed to submit feedback. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error submitting detailed feedback:', error);
+                alert('Error submitting feedback. Please try again.');
+            }
+        }
     </script>
 </body>
 </html>

@@ -52,9 +52,9 @@ __author__ = "Enterprise AI Team"
 __license__ = "MIT"
 
 # Core exports for easy access
-from .core.orchestrator_simple import SystemOrchestrator, EnterpriseAISystem
+from .core.orchestrator import SystemOrchestrator, EnterpriseAISystem
 from .core.agents import AgentFactory, AgentConfig
-from .integrations.tools import ToolFactory, BaseTool
+from .integrations import ToolFactory, BaseTool
 
 from .integrations.mcp_framework import mcp_orchestrator, process_mcp_request
 from .monitoring.metrics import MetricsCollector

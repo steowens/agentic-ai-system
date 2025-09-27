@@ -17,7 +17,9 @@ class RoutingService:
         'equation', 'formula', 'function', 'graph', 'plot', 'sin', 'cos', 'tan',
         'logarithm', 'log', 'ln', 'factorial', 'fibonacci', 'prime', 'matrix',
         'vector', 'geometry', 'algebra', 'calculus', 'statistics', 'probability',
-        'degrees', 'radians', 'convert', 'unit', 'measurement'
+        'degrees', 'radians', 'convert', 'unit', 'measurement', 'height', 'width',
+        'length', 'area', 'volume', 'distance', 'pitch', 'slope', 'angle', 'ratio',
+        'span', 'truss', 'beam', 'load', 'force', 'pressure', 'dimension'
     ]
     
     # File system keywords
@@ -25,6 +27,13 @@ class RoutingService:
         'file', 'directory', 'folder', 'path', 'read', 'write', 'list', 'ls', 'dir',
         'create', 'delete', 'move', 'copy', 'exists', 'size', 'permissions',
         'current directory', 'working directory', 'contents', 'text file'
+    ]
+
+    # Wordle keywords
+    WORDLE_KEYWORDS = [
+        'wordle', 'word', 'letters', 'position', 'constraint', 'exclude', 'include',
+        'contains', 'letter at', 'position', 'must contain', 'cannot contain',
+        'excluded', 'included', 'puzzle', 'five letter', '5 letter'
     ]
     
     def __init__(self):
@@ -50,13 +59,18 @@ class RoutingService:
         
         # Check for mathematical keywords
         math_score = sum(1 for keyword in self.MATH_KEYWORDS if keyword in question_lower)
-        
-        # Check for file system keywords  
+
+        # Check for file system keywords
         file_score = sum(1 for keyword in self.FILE_KEYWORDS if keyword in question_lower)
-        
+
+        # Check for Wordle keywords
+        wordle_score = sum(1 for keyword in self.WORDLE_KEYWORDS if keyword in question_lower)
+
         # Decide based on scores
-        if math_score > file_score and math_score > 0:
+        if math_score > max(file_score, wordle_score) and math_score > 0:
             return "math"
+        elif wordle_score > max(math_score, file_score) and wordle_score > 0:
+            return "wordle"
         elif file_score > 0:
             return "system"
         else:
@@ -77,13 +91,22 @@ class RoutingService:
         # Keyword analysis
         math_score = sum(1 for keyword in self.MATH_KEYWORDS if keyword in question_lower)
         file_score = sum(1 for keyword in self.FILE_KEYWORDS if keyword in question_lower)
-        
-        if math_score > file_score and math_score > 0:
-            confidence = min(0.8, 0.3 + (math_score * 0.1))
-            return ("math", f"Math keywords detected (score: {math_score})", confidence)
-        elif file_score > 0:
-            confidence = min(0.8, 0.3 + (file_score * 0.1))
-            return ("system", f"File system keywords detected (score: {file_score})", confidence)
+        wordle_score = sum(1 for keyword in self.WORDLE_KEYWORDS if keyword in question_lower)
+
+        # Find the highest scoring category
+        scores = [
+            (math_score, "math", "Math keywords detected"),
+            (wordle_score, "wordle", "Wordle keywords detected"),
+            (file_score, "system", "File system keywords detected")
+        ]
+
+        # Sort by score (highest first)
+        scores.sort(key=lambda x: x[0], reverse=True)
+        top_score, top_agent, top_reason = scores[0]
+
+        if top_score > 0:
+            confidence = min(0.8, 0.3 + (top_score * 0.1))
+            return (top_agent, f"{top_reason} (score: {top_score})", confidence)
         else:
             return ("general", "No specific domain keywords detected", 0.5)
 
