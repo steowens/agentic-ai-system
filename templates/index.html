@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic AI System</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- MathJax for mathematical formula rendering -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+            }
+        };
+    </script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        .metrics-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+        .agent-card {
+            transition: transform 0.2s;
+        }
+        .agent-card:hover {
+            transform: translateY(-2px);
+        }
+        .response-content {
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .routing-info {
+            background-color: #e7f3ff;
+            border: 1px solid #b8daff;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .loading {
+            display: none;
+        }
+        .activity-item {
+            border-left: 3px solid #28a745;
+            padding-left: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .activity-item.failed {
+            border-color: #dc3545;
+        }
+        #questionInput {
+            min-height: 100px;
+        }
+        
+        /* Math formula styling */
+        .MathJax {
+            font-size: 1.1em !important;
+        }
+        
+        .response-content .MathJax_Display {
+            margin: 1em 0 !important;
+        }
+        
+        /* Improve math visibility */
+        mjx-container[jax="CHTML"][display="true"] {
+            text-align: center;
+            margin: 1em 0;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-robot"></i> Agentic AI System
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text" id="connectionStatus">
+                    <i class="fas fa-circle text-success"></i> Connected
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- Main Query Interface -->
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-comments"></i> Query Interface
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="queryForm">
+                            <div class="mb-3">
+                                <label for="questionInput" class="form-label">
+                                    Enter your question (Markdown supported):
+                                    <small class="text-muted">Math formulas will be rendered with MathJax</small>
+                                </label>
+                                <textarea 
+                                    class="form-control" 
+                                    id="questionInput" 
+                                    placeholder="What is the integral of x^2?&#10;&#10;Calculate sin(π/4) + cos(π/3)&#10;&#10;List files in current directory.&#10;&#10;Explain machine learning..."
+                                    required
+                                ></textarea>
+                                <div class="form-text">
+                                    <strong>Math examples:</strong> 
+                                    <code>x^2</code>, <code>∫ x dx</code>, <code>sin(π/4)</code>, <code>√(x+1)</code>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="markdownOutput" checked>
+                                    <label class="form-check-label" for="markdownOutput">
+                                        Render response as HTML (from Markdown)
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Submit Question
+                            </button>
+                        </form>
+
+                        <div id="loadingIndicator" class="loading mt-3">
+                            <div class="d-flex align-items-center">
+                                <div class="spinner-border text-primary me-2" role="status"></div>
+                                <span>Processing your question...</span>
+                            </div>
+                        </div>
+
+                        <div id="responseContainer" class="mt-4"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Dashboard -->
+            <div class="col-lg-4">
+                <!-- Real-time Metrics -->
+                <div class="card metrics-card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                            <i class="fas fa-chart-line"></i> <span id="metricsTitle">Session Metrics</span>
+                        </h6>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-light btn-sm" id="sessionViewBtn">Session</button>
+                            <button type="button" class="btn btn-outline-light btn-sm" id="allTimeViewBtn">All Time</button>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-danger btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                                    <i class="fas fa-cog"></i>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" id="resetSessionBtn">
+                                        <i class="fas fa-refresh"></i> New Session
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="#" id="purgeOldDataBtn">
+                                        <i class="fas fa-trash"></i> Purge Old Data (30+ days)
+                                    </a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="#" id="exportDataBtn">
+                                        <i class="fas fa-download"></i> Export Data
+                                    </a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <h4 id="totalCost">$0.000000</h4>
+                                <small>Total Cost</small>
+                            </div>
+                            <div class="col-6">
+                                <h4 id="totalTokens">0</h4>
+                                <small>Total Tokens</small>
+                            </div>
+                        </div>
+                        <hr class="bg-white">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <h4 id="totalRequests">0</h4>
+                                <small>Requests</small>
+                            </div>
+                            <div class="col-6">
+                                <h4 id="avgConfidence">0%</h4>
+                                <small>Avg Confidence</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agent Distribution -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="fas fa-robot"></i> Agent Usage
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="agentDistribution">
+                            <div class="text-muted text-center">No requests yet</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="fas fa-history"></i> Recent Activity
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="recentActivity" style="max-height: 400px; overflow-y: auto;">
+                            <div class="text-muted text-center">No activity yet</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <script>
+        // IndexedDB wrapper for activity storage
+        class ActivityDB {
+            constructor() {
+                this.dbName = 'AgenticAI';
+                this.version = 1;
+                this.db = null;
+            }
+
+            async init() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(this.dbName, this.version);
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        this.db = request.result;
+                        resolve(this.db);
+                    };
+                    
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+                        
+                        if (!db.objectStoreNames.contains('activity')) {
+                            const store = db.createObjectStore('activity', { 
+                                keyPath: 'id', 
+                                autoIncrement: true 
+                            });
+                            
+                            store.createIndex('timestamp', 'timestamp');
+                            store.createIndex('agent', 'agent');
+                            store.createIndex('cost', 'cost');
+                        }
+                    };
+                });
+            }
+
+            async addActivity(activity) {
+                if (!this.db) await this.init();
+                
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['activity'], 'readwrite');
+                    const store = transaction.objectStore('activity');
+                    const request = store.add({
+                        ...activity,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve(request.result);
+                });
+            }
+
+            async getRecentActivity(limit = 10) {
+                if (!this.db) await this.init();
+                
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['activity'], 'readonly');
+                    const store = transaction.objectStore('activity');
+                    const index = store.index('timestamp');
+                    
+                    const request = index.openCursor(null, 'prev');
+                    const results = [];
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = (event) => {
+                        const cursor = event.target.result;
+                        if (cursor && results.length < limit) {
+                            results.push(cursor.value);
+                            cursor.continue();
+                        } else {
+                            resolve(results);
+                        }
+                    };
+                });
+            }
+
+            async getTotalStats(sinceDate = null) {
+                if (!this.db) await this.init();
+                
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['activity'], 'readonly');
+                    const store = transaction.objectStore('activity');
+                    
+                    let request;
+                    if (sinceDate) {
+                        const index = store.index('timestamp');
+                        const range = IDBKeyRange.lowerBound(sinceDate);
+                        request = index.getAll(range);
+                    } else {
+                        request = store.getAll();
+                    }
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        const activities = request.result;
+                        const stats = {
+                            totalCost: activities.reduce((sum, a) => sum + (a.cost || 0), 0),
+                            totalTokens: activities.reduce((sum, a) => sum + (a.tokens || 0), 0),
+                            totalRequests: activities.length,
+                            agentUsage: {}
+                        };
+                        
+                        activities.forEach(activity => {
+                            const agent = activity.agent || 'unknown';
+                            stats.agentUsage[agent] = (stats.agentUsage[agent] || 0) + 1;
+                        });
+                        
+                        resolve(stats);
+                    };
+                });
+            }
+
+            async getActivitiesSince(sinceDate) {
+                if (!this.db) await this.init();
+                
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['activity'], 'readonly');
+                    const store = transaction.objectStore('activity');
+                    const index = store.index('timestamp');
+                    
+                    const range = IDBKeyRange.lowerBound(sinceDate);
+                    const request = index.getAll(range);
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve(request.result);
+                });
+            }
+
+            async purgeOldData(daysToKeep = 30) {
+                if (!this.db) await this.init();
+                
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+                const cutoffISO = cutoffDate.toISOString();
+                
+                return new Promise((resolve, reject) => {
+                    const transaction = this.db.transaction(['activity'], 'readwrite');
+                    const store = transaction.objectStore('activity');
+                    const index = store.index('timestamp');
+                    
+                    const range = IDBKeyRange.upperBound(cutoffISO);
+                    const request = index.openCursor(range);
+                    let deletedCount = 0;
+                    
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = (event) => {
+                        const cursor = event.target.result;
+                        if (cursor) {
+                            cursor.delete();
+                            deletedCount++;
+                            cursor.continue();
+                        } else {
+                            resolve(deletedCount);
+                        }
+                    };
+                });
+            }
+        }
+
+        // Initialize activity database
+        const activityDB = new ActivityDB();
+
+        // Session management
+        class SessionManager {
+            constructor() {
+                this.sessionKey = 'currentSession';
+                this.currentSession = this.getCurrentSession();
+            }
+
+            getCurrentSession() {
+                const stored = localStorage.getItem(this.sessionKey);
+                if (stored) {
+                    return JSON.parse(stored);
+                } else {
+                    return this.startNewSession();
+                }
+            }
+
+            startNewSession() {
+                const session = {
+                    id: Date.now().toString(),
+                    startTime: new Date().toISOString(),
+                    name: `Session ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`
+                };
+                localStorage.setItem(this.sessionKey, JSON.stringify(session));
+                this.currentSession = session;
+                return session;
+            }
+
+            getSessionStats() {
+                return activityDB.getTotalStats(this.currentSession.startTime);
+            }
+
+            async resetSession() {
+                this.startNewSession();
+                const stats = await this.getSessionStats();
+                displayMetrics(stats);
+                return this.currentSession;
+            }
+
+            async getAllSessions() {
+                // Get all activities and extract unique session periods
+                const allActivities = await activityDB.getActivitiesSince('1970-01-01');
+                const sessions = new Map();
+                
+                allActivities.forEach(activity => {
+                    const date = activity.timestamp.split('T')[0]; // Get date part
+                    if (!sessions.has(date)) {
+                        sessions.set(date, {
+                            date: date,
+                            activities: [],
+                            startTime: activity.timestamp
+                        });
+                    }
+                    sessions.get(date).activities.push(activity);
+                });
+                
+                return Array.from(sessions.values());
+            }
+        }
+
+        const sessionManager = new SessionManager();
+
+        // Initialize metrics from localStorage and IndexedDB
+        let currentViewMode = 'session'; // 'session' or 'alltime'
+
+        async function initializeMetrics() {
+            try {
+                await loadMetricsForCurrentView();
+                document.getElementById('connectionStatus').innerHTML = 
+                    '<i class="fas fa-circle text-success"></i> Ready';
+                
+                // Set up view toggle buttons
+                setupMetricsControls();
+                
+            } catch (error) {
+                console.error('Failed to initialize metrics:', error);
+                document.getElementById('connectionStatus').innerHTML = 
+                    '<i class="fas fa-circle text-warning"></i> Limited';
+            }
+        }
+
+        async function loadMetricsForCurrentView() {
+            let metrics;
+            
+            if (currentViewMode === 'session') {
+                const sessionStats = await sessionManager.getSessionStats();
+                const recentActivity = await activityDB.getActivitiesSince(sessionManager.currentSession.startTime);
+                
+                metrics = {
+                    ...sessionStats,
+                    recentActivity: recentActivity.slice(0, 10)
+                };
+                document.getElementById('metricsTitle').textContent = 'Session Metrics';
+            } else {
+                const allTimeStats = await activityDB.getTotalStats();
+                const recentActivity = await activityDB.getRecentActivity(10);
+                
+                metrics = {
+                    ...allTimeStats,
+                    recentActivity: recentActivity
+                };
+                document.getElementById('metricsTitle').textContent = 'All Time Metrics';
+            }
+            
+            displayMetrics(metrics);
+        }
+
+        function setupMetricsControls() {
+            // View toggle buttons
+            document.getElementById('sessionViewBtn').addEventListener('click', async () => {
+                currentViewMode = 'session';
+                updateViewButtons();
+                await loadMetricsForCurrentView();
+            });
+
+            document.getElementById('allTimeViewBtn').addEventListener('click', async () => {
+                currentViewMode = 'alltime';
+                updateViewButtons();
+                await loadMetricsForCurrentView();
+            });
+
+            // Reset session button
+            document.getElementById('resetSessionBtn').addEventListener('click', async () => {
+                if (confirm('Start a new session? This will reset current session metrics.')) {
+                    await sessionManager.resetSession();
+                    if (currentViewMode === 'session') {
+                        await loadMetricsForCurrentView();
+                    }
+                }
+            });
+
+            // Purge old data button
+            document.getElementById('purgeOldDataBtn').addEventListener('click', async () => {
+                if (confirm('Delete activity data older than 30 days? This cannot be undone.')) {
+                    try {
+                        const deletedCount = await activityDB.purgeOldData(30);
+                        alert(`Deleted ${deletedCount} old activity records.`);
+                        await loadMetricsForCurrentView();
+                    } catch (error) {
+                        alert('Failed to purge old data: ' + error.message);
+                    }
+                }
+            });
+
+            // Export data button
+            document.getElementById('exportDataBtn').addEventListener('click', async () => {
+                try {
+                    const allActivities = await activityDB.getActivitiesSince('1970-01-01');
+                    const csvData = exportToCSV(allActivities);
+                    downloadCSV(csvData, `agentic-ai-data-${new Date().toISOString().split('T')[0]}.csv`);
+                } catch (error) {
+                    alert('Failed to export data: ' + error.message);
+                }
+            });
+
+            // Set initial button states
+            updateViewButtons();
+        }
+
+        function updateViewButtons() {
+            const sessionBtn = document.getElementById('sessionViewBtn');
+            const allTimeBtn = document.getElementById('allTimeViewBtn');
+            
+            if (currentViewMode === 'session') {
+                sessionBtn.classList.remove('btn-outline-light');
+                sessionBtn.classList.add('btn-light');
+                allTimeBtn.classList.remove('btn-light');
+                allTimeBtn.classList.add('btn-outline-light');
+            } else {
+                allTimeBtn.classList.remove('btn-outline-light');
+                allTimeBtn.classList.add('btn-light');
+                sessionBtn.classList.remove('btn-light');
+                sessionBtn.classList.add('btn-outline-light');
+            }
+        }
+
+        function exportToCSV(activities) {
+            const headers = ['Timestamp', 'Question', 'Agent', 'Cost', 'Tokens', 'Time (ms)', 'Confidence'];
+            const rows = activities.map(activity => [
+                activity.timestamp,
+                `"${activity.question.replace(/"/g, '""')}"`,
+                activity.agent,
+                activity.cost || 0,
+                activity.tokens || 0,
+                activity.time_ms || 0,
+                activity.confidence || 0
+            ]);
+            
+            return [headers, ...rows].map(row => row.join(',')).join('\n');
+        }
+
+        function downloadCSV(csvData, filename) {
+            const blob = new Blob([csvData], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Get metrics from localStorage
+        function getStoredMetrics() {
+            return {
+                totalCost: parseFloat(localStorage.getItem('totalCost')) || 0,
+                totalTokens: parseInt(localStorage.getItem('totalTokens')) || 0,
+                totalRequests: parseInt(localStorage.getItem('totalRequests')) || 0,
+                agentUsage: JSON.parse(localStorage.getItem('agentUsage')) || {},
+                recentActivity: JSON.parse(localStorage.getItem('recentActivity')) || []
+            };
+        }
+
+        // Update metrics with new query results
+        async function updateMetricsFromQuery(result) {
+            try {
+                const agent = result.agent_type || result.agent_used || 'unknown';
+                
+                // Store activity in IndexedDB
+                const activity = {
+                    question: result.originalQuestion ? result.originalQuestion.substring(0, 100) : 'Query',
+                    agent: agent,
+                    time_ms: Math.round(result.execution_time_ms || 0),
+                    cost: result.cost || 0,
+                    tokens: result.token_usage ? result.token_usage.total_tokens : 0,
+                    confidence: Math.round((result.confidence || 0) * 100)
+                };
+                
+                await activityDB.addActivity(activity);
+                
+                // Get updated stats from IndexedDB
+                const dbStats = await activityDB.getTotalStats();
+                const recentActivity = await activityDB.getRecentActivity(10);
+                
+                const metrics = {
+                    totalCost: dbStats.totalCost,
+                    totalTokens: dbStats.totalTokens,
+                    totalRequests: dbStats.totalRequests,
+                    agentUsage: dbStats.agentUsage,
+                    recentActivity: recentActivity
+                };
+                
+                // Also keep localStorage as backup
+                localStorage.setItem('totalCost', metrics.totalCost);
+                localStorage.setItem('totalTokens', metrics.totalTokens);
+                localStorage.setItem('totalRequests', metrics.totalRequests);
+                localStorage.setItem('agentUsage', JSON.stringify(metrics.agentUsage));
+                
+                // Refresh current view instead of direct display
+                await loadMetricsForCurrentView();
+                
+            } catch (error) {
+                console.error('Failed to update metrics in IndexedDB:', error);
+                // Fallback to localStorage only
+                const metrics = getStoredMetrics();
+                metrics.totalCost += result.cost || 0;
+                metrics.totalTokens += (result.token_usage ? result.token_usage.total_tokens : 0);
+                metrics.totalRequests += 1;
+                
+                const agent = result.agent_type || result.agent_used || 'unknown';
+                metrics.agentUsage[agent] = (metrics.agentUsage[agent] || 0) + 1;
+                
+                localStorage.setItem('totalCost', metrics.totalCost);
+                localStorage.setItem('totalTokens', metrics.totalTokens);
+                localStorage.setItem('totalRequests', metrics.totalRequests);
+                localStorage.setItem('agentUsage', JSON.stringify(metrics.agentUsage));
+                
+                displayMetrics(metrics);
+            }
+        }
+
+        // Initialize metrics from localStorage
+        initializeMetrics();
+
+        // Query form submission
+        document.getElementById('queryForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const question = document.getElementById('questionInput').value;
+            const markdown = document.getElementById('markdownOutput').checked;
+            
+            if (!question.trim()) return;
+            
+            // Show loading
+            document.getElementById('loadingIndicator').style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        markdown: markdown
+                    })
+                });
+                
+                const result = await response.json();
+                displayResponse(result);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                displayError('Failed to process question: ' + error.message);
+            } finally {
+                document.getElementById('loadingIndicator').style.display = 'none';
+            }
+        });
+
+        function displayResponse(result) {
+            const container = document.getElementById('responseContainer');
+            
+            if (!result.success) {
+                container.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> ${result.error}
+                    </div>
+                `;
+                return;
+            }
+            
+            const data = result.result;
+            const responseContent = data.response_html || data.response;
+            
+            container.innerHTML = `
+                <div class="routing-info">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>🎯 Routed to:</strong> ${data.agent_type}<br>
+                            <strong>📊 Confidence:</strong> ${(data.confidence * 100).toFixed(1)}%<br>
+                            <strong>⏱️ Time:</strong> ${data.execution_time_ms.toFixed(1)}ms
+                        </div>
+                        <div class="col-md-6">
+                            <strong>🔢 Tokens:</strong> ${data.token_usage ? data.token_usage.total_tokens : 'N/A'}<br>
+                            <strong>💰 Total Cost:</strong> $${data.token_usage ? data.token_usage.estimated_cost_usd.toFixed(6) : 'N/A'}<br>
+                            <strong>🆔 Request:</strong> <small>${data.request_id}</small>
+                        </div>
+                        ${data.token_usage ? `
+                        <div class="col-12 mt-2">
+                            <small class="text-muted">
+                                📥 Input: ${data.token_usage.prompt_tokens} tokens × $${data.token_usage.input_rate_per_1k.toFixed(6)} = $${data.token_usage.input_cost_usd.toFixed(8)} | 
+                                📤 Output: ${data.token_usage.completion_tokens} tokens × $${data.token_usage.output_rate_per_1k.toFixed(6)} = $${data.token_usage.output_cost_usd.toFixed(8)} |
+                                Ratio: ${data.token_usage.cost_ratio}
+                            </small>
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="mt-2">
+                        <strong>💡 Reasoning:</strong> ${data.reasoning}
+                    </div>
+                    ${data.expressions_found && data.expressions_found.length > 0 ? 
+                        `<div class="mt-2"><strong>🧮 Math expressions:</strong> ${data.expressions_found.join(', ')}</div>` : ''
+                    }
+                </div>
+                
+                <div class="response-content">
+                    <h6><i class="fas fa-reply"></i> Response:</h6>
+                    <div>${responseContent}</div>
+                </div>
+            `;
+            
+            // Highlight code blocks
+            container.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+            
+            // Process MathJax for mathematical formulas
+            if (typeof MathJax !== 'undefined') {
+                MathJax.typesetPromise([container]).catch(function (err) {
+                    console.log('MathJax typesetting failed: ' + err.message);
+                });
+            }
+            
+            // Update metrics immediately from query result
+            data.originalQuestion = document.getElementById('questionInput').value; // Add original question
+            updateMetricsFromQuery(data);
+        }
+
+        function displayError(message) {
+            document.getElementById('responseContainer').innerHTML = `
+                <div class="alert alert-danger">
+                    <strong>Error:</strong> ${message}
+                </div>
+            `;
+        }
+
+        function displayMetrics(metrics) {
+            // Update total costs from localStorage
+            document.getElementById('totalCost').textContent = `$${metrics.totalCost.toFixed(6)}`;
+            
+            // Update total tokens from localStorage
+            document.getElementById('totalTokens').textContent = metrics.totalTokens.toLocaleString();
+            
+            // Update requests 
+            document.getElementById('totalRequests').textContent = metrics.totalRequests.toLocaleString();
+            
+            // Calculate average confidence from recent activity
+            const avgConfidence = metrics.recentActivity.length > 0 ? 
+                metrics.recentActivity.reduce((sum, activity) => sum + activity.confidence, 0) / metrics.recentActivity.length :
+                0;
+            document.getElementById('avgConfidence').textContent = `${Math.round(avgConfidence)}%`;
+            
+            // Update agent distribution from localStorage
+            updateAgentDistribution(metrics.agentUsage);
+            
+            // Update recent activity from localStorage
+            updateRecentActivity(metrics.recentActivity);
+        }
+
+        function updateAgentDistribution(distribution) {
+            const container = document.getElementById('agentDistribution');
+            
+            if (Object.keys(distribution).length === 0) {
+                container.innerHTML = '<div class="text-muted text-center">No requests yet</div>';
+                return;
+            }
+            
+            const total = Object.values(distribution).reduce((a, b) => a + b, 0);
+            
+            let html = '';
+            for (const [agent, count] of Object.entries(distribution)) {
+                const percentage = ((count / total) * 100).toFixed(1);
+                const color = agent === 'math' ? 'primary' : agent === 'system' ? 'success' : 'secondary';
+                
+                html += `
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-robot text-${color}"></i> ${agent}</span>
+                            <span>${count} (${percentage}%)</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-${color}" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+
+        function updateRecentActivity(activities) {
+            const container = document.getElementById('recentActivity');
+            
+            if (!activities || activities.length === 0) {
+                container.innerHTML = '<div class="text-muted text-center">No activity yet</div>';
+                return;
+            }
+            
+            let html = '';
+            activities.slice(0, 10).forEach(activity => {
+                const time = new Date(activity.timestamp).toLocaleTimeString();
+                const cost = activity.cost ? `$${activity.cost.toFixed(6)}` : '$0.000000';
+                
+                html += `
+                    <div class="activity-item border-bottom pb-2 mb-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="fw-bold">
+                                    <i class="fas fa-robot text-primary"></i> ${activity.agent}
+                                    <small class="text-muted">(${activity.confidence}%)</small>
+                                </div>
+                                <div class="text-muted small">${activity.question}</div>
+                                <div class="text-muted small">
+                                    ${activity.time_ms}ms • ${cost} • ${activity.tokens} tokens
+                                </div>
+                            </div>
+                            <small class="text-muted">${time}</small>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        // No WebSocket pings needed - using HTTP polling
+    </script>
+</body>
+</html>

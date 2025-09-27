@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .dashboard-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-2px);
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .success-card {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        .warning-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        .cost-card {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-healthy { background-color: #28a745; }
+        .status-warning { background-color: #ffc107; }
+        .status-error { background-color: #dc3545; }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 20px 0;
+        }
+        .sidebar {
+            background: #f8f9fa;
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .main-content {
+            padding: 20px;
+        }
+        .feedback-form {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .agent-performance-item {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #007bff;
+        }
+        .performance-good { border-left-color: #28a745; }
+        .performance-warning { border-left-color: #ffc107; }
+        .performance-poor { border-left-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-2 sidebar">
+                <div class="text-center mb-4">
+                    <i class="fas fa-robot fa-3x text-primary"></i>
+                    <h5 class="mt-2">AI Dashboard</h5>
+                </div>
+                
+                <div class="nav flex-column">
+                    <a class="nav-link active" href="#overview" onclick="showSection('overview')">
+                        <i class="fas fa-tachometer-alt"></i> Overview
+                    </a>
+                    <a class="nav-link" href="#routing" onclick="showSection('routing')">
+                        <i class="fas fa-route"></i> Routing
+                    </a>
+                    <a class="nav-link" href="#feedback" onclick="showSection('feedback')">
+                        <i class="fas fa-comments"></i> Feedback
+                    </a>
+                    <a class="nav-link" href="#costs" onclick="showSection('costs')">
+                        <i class="fas fa-dollar-sign"></i> Costs
+                    </a>
+                    <a class="nav-link" href="#learning" onclick="showSection('learning')">
+                        <i class="fas fa-brain"></i> Learning
+                    </a>
+                    <a class="nav-link" href="#mcp" onclick="showSection('mcp')">
+                        <i class="fas fa-plug"></i> MCP Resources
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="col-md-10 main-content">
+                <!-- Header -->
+                <div class="row mb-4">
+                    <div class="col">
+                        <h2>Enterprise AI Routing Dashboard</h2>
+                        <p class="text-muted">Real-time monitoring and optimization of intelligent agent routing</p>
+                        <div id="last-update" class="text-muted small"></div>
+                    </div>
+                    <div class="col-auto">
+                        <div class="d-flex align-items-center">
+                            <span class="status-indicator status-healthy"></span>
+                            <span>System Healthy</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Overview Section -->
+                <div id="overview" class="dashboard-section">
+                    <!-- Key Metrics -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card dashboard-card metric-card">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-comments fa-2x mb-2"></i>
+                                    <h3 id="total-requests">-</h3>
+                                    <p>Total Requests (30d)</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card dashboard-card success-card">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-star fa-2x mb-2"></i>
+                                    <h3 id="avg-rating">-</h3>
+                                    <p>Average Rating</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card dashboard-card warning-card">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-bullseye fa-2x mb-2"></i>
+                                    <h3 id="success-rate">-</h3>
+                                    <p>Success Rate</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card dashboard-card cost-card">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-dollar-sign fa-2x mb-2"></i>
+                                    <h3 id="total-cost">-</h3>
+                                    <p>Total Cost (7d)</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Agent Performance -->
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-robot"></i> Agent Performance</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="agent-performance-list">
+                                        <!-- Agent performance items will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-lightbulb"></i> Recent Improvements</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="improvements-list">
+                                        <!-- Improvements will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Routing Section -->
+                <div id="routing" class="dashboard-section" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-route"></i> Routing Success Trends</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <canvas id="routing-trends-chart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-chart-pie"></i> Agent Usage Distribution</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <canvas id="agent-distribution-chart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Feedback Section -->
+                <div id="feedback" class="dashboard-section" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-comments"></i> Recent User Feedback</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="recent-feedback">
+                                        <!-- Recent feedback will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="feedback-form">
+                                <h5><i class="fas fa-pencil-alt"></i> Submit Feedback</h5>
+                                <form id="feedback-form">
+                                    <div class="mb-3">
+                                        <label>Request ID:</label>
+                                        <input type="text" class="form-control" id="request-id" placeholder="Enter request ID">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label>Rating:</label>
+                                        <select class="form-control" id="rating">
+                                            <option value="1">1 - Poor</option>
+                                            <option value="2">2 - Fair</option>
+                                            <option value="3">3 - Good</option>
+                                            <option value="4">4 - Very Good</option>
+                                            <option value="5">5 - Excellent</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label>Comment:</label>
+                                        <textarea class="form-control" id="comment" rows="3"></textarea>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label>Suggested Agent:</label>
+                                        <select class="form-control" id="suggested-agent">
+                                            <option value="">No change</option>
+                                            <option value="math_agent">Math Agent</option>
+                                            <option value="system_agent">System Agent</option>
+                                            <option value="general_agent">General Agent</option>
+                                            <option value="esri_agent">ESRI Agent</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">Submit Feedback</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Costs Section -->
+                <div id="costs" class="dashboard-section" style="display: none;">
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card dashboard-card">
+                                <div class="card-body text-center">
+                                    <h4 id="daily-cost">$0.00</h4>
+                                    <p>Daily Cost</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card dashboard-card">
+                                <div class="card-body text-center">
+                                    <h4 id="weekly-cost">$0.00</h4>
+                                    <p>Weekly Cost</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card dashboard-card">
+                                <div class="card-body text-center">
+                                    <h4 id="monthly-cost">$0.00</h4>
+                                    <p>Monthly Cost</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-chart-line"></i> Cost Trends</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <canvas id="cost-trends-chart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-piggy-bank"></i> Cost Optimization</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="cost-optimizations">
+                                        <!-- Cost optimization suggestions will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Learning Section -->
+                <div id="learning" class="dashboard-section" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-brain"></i> ML Model Performance</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="model-comparison">
+                                        <!-- Model comparison will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-chart-line"></i> Learning Timeline</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="learning-timeline">
+                                        <!-- Learning timeline will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- MCP Section -->
+                <div id="mcp" class="dashboard-section" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-plug"></i> MCP Resource Status</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="mcp-resources">
+                                        <!-- MCP resources will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card dashboard-card">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-heartbeat"></i> Integration Health</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="integration-health">
+                                        <!-- Integration health will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let socket = null;
+        let charts = {};
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDashboard();
+            connectWebSocket();
+        });
+        
+        function initializeDashboard() {
+            loadDashboardData();
+            setupEventListeners();
+        }
+        
+        function connectWebSocket() {
+            const wsUrl = `ws://${window.location.host}/ws/dashboard`;
+            socket = new WebSocket(wsUrl);
+            
+            socket.onopen = function() {
+                console.log('WebSocket connected');
+            };
+            
+            socket.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                handleWebSocketMessage(message);
+            };
+            
+            socket.onclose = function() {
+                console.log('WebSocket disconnected. Attempting to reconnect...');
+                setTimeout(connectWebSocket, 5000);
+            };
+        }
+        
+        function handleWebSocketMessage(message) {
+            if (message.type === 'dashboard_overview' || message.type === 'dashboard_update') {
+                updateDashboardData(message.data);
+            }
+        }
+        
+        async function loadDashboardData() {
+            try {
+                const response = await fetch('/api/dashboard/overview');
+                const data = await response.json();
+                updateDashboardData(data);
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error);
+            }
+        }
+        
+        function updateDashboardData(data) {
+            // Update overview metrics
+            document.getElementById('total-requests').textContent = data.overview.total_requests_30d;
+            document.getElementById('avg-rating').textContent = data.overview.average_rating.toFixed(1);
+            document.getElementById('success-rate').textContent = data.overview.routing_success_rate + '%';
+            document.getElementById('total-cost').textContent = '$' + data.overview.total_cost_7d.toFixed(4);
+            
+            // Update last update time
+            const lastUpdate = new Date(data.overview.last_updated);
+            document.getElementById('last-update').textContent = `Last updated: ${lastUpdate.toLocaleString()}`;
+            
+            // Update agent performance
+            updateAgentPerformance(data.agent_performance);
+            
+            // Update improvements
+            updateImprovements(data.recent_improvements);
+        }
+        
+        function updateAgentPerformance(agents) {
+            const container = document.getElementById('agent-performance-list');
+            container.innerHTML = '';
+            
+            agents.forEach(agent => {
+                const performanceClass = agent.success_rate >= 80 ? 'performance-good' : 
+                                      agent.success_rate >= 60 ? 'performance-warning' : 'performance-poor';
+                
+                const item = document.createElement('div');
+                item.className = `agent-performance-item ${performanceClass}`;
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">${agent.name.replace('_', ' ').toUpperCase()}</h6>
+                            <small class="text-muted">${agent.requests} requests</small>
+                        </div>
+                        <div class="text-end">
+                            <div><strong>${agent.success_rate}%</strong> success</div>
+                            <div><small>Rating: ${agent.rating.toFixed(1)}/5</small></div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function updateImprovements(improvements) {
+            const container = document.getElementById('improvements-list');
+            container.innerHTML = '';
+            
+            if (improvements.length === 0) {
+                container.innerHTML = '<p class="text-muted">No improvements needed at this time.</p>';
+                return;
+            }
+            
+            improvements.forEach(improvement => {
+                const item = document.createElement('div');
+                item.className = 'mb-2 p-2 border rounded';
+                item.innerHTML = `
+                    <small class="text-primary">${improvement.recommendation}</small>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function showSection(sectionName) {
+            // Hide all sections
+            document.querySelectorAll('.dashboard-section').forEach(section => {
+                section.style.display = 'none';
+            });
+            
+            // Show selected section
+            document.getElementById(sectionName).style.display = 'block';
+            
+            // Update navigation
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Load section-specific data
+            loadSectionData(sectionName);
+        }
+        
+        async function loadSectionData(section) {
+            try {
+                let data = null;
+                
+                switch (section) {
+                    case 'routing':
+                        data = await fetch('/api/routing/performance').then(r => r.json());
+                        updateRoutingSection(data);
+                        break;
+                    case 'feedback':
+                        data = await fetch('/api/feedback/summary').then(r => r.json());
+                        updateFeedbackSection(data);
+                        break;
+                    case 'costs':
+                        data = await fetch('/api/costs/breakdown').then(r => r.json());
+                        updateCostsSection(data);
+                        break;
+                    case 'learning':
+                        data = await fetch('/api/learning/progress').then(r => r.json());
+                        updateLearningSection(data);
+                        break;
+                    case 'mcp':
+                        data = await fetch('/api/mcp/resources').then(r => r.json());
+                        updateMCPSection(data);
+                        break;
+                }
+            } catch (error) {
+                console.error(`Failed to load ${section} data:`, error);
+            }
+        }
+        
+        function updateRoutingSection(data) {
+            // Create routing trends chart if it doesn't exist
+            if (!charts.routingTrends) {
+                const ctx = document.getElementById('routing-trends-chart').getContext('2d');
+                charts.routingTrends = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.success_trends?.map(t => t.date) || [],
+                        datasets: [{
+                            label: 'Success Rate',
+                            data: data.success_trends?.map(t => t.value) || [],
+                            borderColor: '#28a745',
+                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        
+        function updateFeedbackSection(data) {
+            const container = document.getElementById('recent-feedback');
+            container.innerHTML = '';
+            
+            data.recent_feedback?.forEach(feedback => {
+                const item = document.createElement('div');
+                item.className = 'border-bottom pb-2 mb-2';
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between">
+                        <span><strong>${feedback.agent}</strong></span>
+                        <span class="text-muted">${feedback.date}</span>
+                    </div>
+                    <div>Rating: ${feedback.rating}/5</div>
+                    <div class="text-muted">${feedback.comment}</div>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function updateCostsSection(data) {
+            document.getElementById('daily-cost').textContent = '$' + data.daily_cost?.toFixed(4) || '0.00';
+            document.getElementById('weekly-cost').textContent = '$' + data.weekly_cost?.toFixed(4) || '0.00';
+            document.getElementById('monthly-cost').textContent = '$' + data.monthly_cost?.toFixed(4) || '0.00';
+            
+            // Update cost optimizations
+            const container = document.getElementById('cost-optimizations');
+            container.innerHTML = '';
+            
+            data.optimization_suggestions?.forEach(suggestion => {
+                const item = document.createElement('div');
+                item.className = 'mb-2 p-2 bg-light rounded';
+                item.innerHTML = `
+                    <small><strong>💡 ${suggestion.description}</strong></small><br>
+                    <small class="text-success">Potential savings: $${suggestion.savings?.toFixed(4) || '0.00'}</small>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function updateLearningSection(data) {
+            const container = document.getElementById('model-comparison');
+            container.innerHTML = '';
+            
+            data.model_comparison?.forEach(model => {
+                const item = document.createElement('div');
+                item.className = `mb-2 p-2 rounded ${model.is_best ? 'bg-success text-white' : 'bg-light'}`;
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between">
+                        <span><strong>${model.name}</strong> ${model.is_best ? '👑' : ''}</span>
+                        <span>${model.accuracy}%</span>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function updateMCPSection(data) {
+            const container = document.getElementById('mcp-resources');
+            container.innerHTML = '';
+            
+            data.resource_status?.forEach(resource => {
+                const item = document.createElement('div');
+                item.className = 'mb-2 p-2 border rounded';
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">${resource.name}</h6>
+                            <small class="text-muted">${resource.type}</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="status-indicator status-healthy"></span>
+                            <small>${resource.cost_savings}</small>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function setupEventListeners() {
+            // Feedback form submission
+            document.getElementById('feedback-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData();
+                formData.append('request_id', document.getElementById('request-id').value);
+                formData.append('rating', document.getElementById('rating').value);
+                formData.append('comment', document.getElementById('comment').value);
+                formData.append('suggested_agent', document.getElementById('suggested-agent').value);
+                
+                try {
+                    const response = await fetch('/api/feedback/submit', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert('Feedback submitted successfully!');
+                        document.getElementById('feedback-form').reset();
+                    } else {
+                        alert('Failed to submit feedback.');
+                    }
+                } catch (error) {
+                    alert('Error submitting feedback: ' + error.message);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
