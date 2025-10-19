@@ -359,7 +359,7 @@ ENTERPRISE_AI_LOG_LEVEL=DEBUG enterprise-ai --interactive
 
 ## License
 
-MIT License - see LICENSE file for details.
+see LICENSE file for details.
 
 ## Support
 
